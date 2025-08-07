@@ -50,7 +50,8 @@ public class PlayerData {
     @Setter
     private Set<PlayerAuthInputData> inputData = new HashSet<>();
 
-    public long tick = Long.MIN_VALUE;
+    public long tick = 0;
+    public long sinceAuthInput = System.currentTimeMillis();
 
     public Integer currentLoadingScreen = null;
     public boolean inLoadingScreen;
@@ -97,7 +98,7 @@ public class PlayerData {
 
     // Riptide related
     public boolean dirtyRiptide, dirtySpinStop, thisTickSpinAttack, thisTickOnGroundSpinAttack;
-    public int autoSpinAttackTicks;
+    public int autoSpinAttackTicks, sinceTridentUse;
     public ItemData riptideItem = ItemData.AIR;
     public void setDirtyRiptide(int j, ItemData data) {
         if (j < 10 || !CompensatedInventory.getEnchantments(data).containsKey(BedrockEnchantment.RIPTIDE)) {
@@ -135,7 +136,9 @@ public class PlayerData {
     public boolean horizontalCollision, verticalCollision;
     public boolean soulSandBelow;
 
-    public Integer steppingOnHoneyY = null;
+    public boolean nearBamboo;
+
+    public boolean beingPushByLava;
 
     public final Map<Fluid, Float> fluidHeight = new HashMap<>();
     public float getFluidHeight(Fluid tagKey) {
@@ -150,7 +153,7 @@ public class PlayerData {
     public int tickSinceBlockResync;
 
     // Prediction related method
-    public final double getMaxOffset() {
+    public final float getMaxOffset() {
         return Boar.getConfig().acceptanceThreshold();
     }
 

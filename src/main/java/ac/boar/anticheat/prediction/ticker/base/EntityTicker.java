@@ -35,7 +35,7 @@ public class EntityTicker {
         // this.updateSubmergedInWaterState();
         this.updateSwimming();
 
-        player.soulSandBelow = player.compensatedWorld.getBlockState(player.getOnPos(1.0E-3F), 0).getState().is(Blocks.SOUL_SAND);
+        player.soulSandBelow = player.compensatedWorld.getBlockState(player.position.down(1.0E-3F).toVector3i(), 0).getState().is(Blocks.SOUL_SAND);
     }
 
     private void updateSwimming() {
@@ -47,8 +47,7 @@ public class EntityTicker {
     private void updateWaterState() {
         player.fluidHeight.clear();
         this.checkWaterState();
-        this.updateFluidHeightAndDoFluidPushing(player.compensatedWorld.getDimension().bedrockId() ==
-                BedrockDimension.DEFAULT_NETHER_ID ? 0.007F : 0.0023333333333333335F, Fluid.LAVA);
+        this.updateFluidHeightAndDoFluidPushing(0.007F, Fluid.LAVA);
     }
 
     void checkWaterState() {
@@ -95,8 +94,12 @@ public class EntityTicker {
         }}}
 
         if (vec3.lengthSquared() > 0.0D) {
-            vec3 = vec3.normalize();
-            player.velocity = player.velocity.add(vec3.multiply(speed));
+            vec3 = vec3.normalize().multiply(speed);
+            player.velocity = player.velocity.add(vec3);
+        }
+
+        if (tag == Fluid.LAVA) {
+            player.beingPushByLava = vec3.horizontalLengthSquared() > 1.0E-6;
         }
 
         player.fluidHeight.put(tag, maxFluidHeight);
@@ -109,13 +112,15 @@ public class EntityTicker {
             player.compensatedWorld.getBlockState(lv, 0).onSteppedOn(player, lv);
         }
 
-        final BlockPositionIterator iterator = getBlockPositionIterator();
+        Vector3i min = Vector3i.from(player.boundingBox.minX + 0.001D, player.boundingBox.minY + 0.001D, player.boundingBox.minZ + 0.001D);
+        Vector3i max = Vector3i.from(player.boundingBox.maxX - 0.001D, player.boundingBox.maxY - 0.001D, player.boundingBox.maxZ - 0.001D);
 
         final Mutable mutable = new Mutable();
-        for (iterator.reset(); iterator.hasNext(); iterator.next()) {
-            mutable.set(iterator.getX(), iterator.getY(), iterator.getZ());
-            player.compensatedWorld.getBlockState(iterator.getX(), iterator.getY(), iterator.getZ(), 0).entityInside(player, mutable);
-        }
+        for (int i = min.getX(); i <= max.getX(); ++i) {for (int j = min.getY(); j <= max.getY(); ++j) {for (int k = min.getZ(); k <= max.getZ(); ++k) {
+            mutable.set(i, j, k);
+
+            player.compensatedWorld.getBlockState(i, j, k, 0).entityInside(player, mutable);
+        }}}
     }
 
     public final void doSelfMove(Vec3 vec3) {
@@ -134,12 +139,19 @@ public class EntityTicker {
         player.verticalCollision = vec3.y != vec32.y;
         player.onGround = player.verticalCollision && vec3.y < 0.0;
 
+        // Player is near bamboo, we don't know what the offsetting is so we let player decide this...
+        if (player.nearBamboo && player.getInputData().contains(PlayerAuthInputData.HORIZONTAL_COLLISION)) {
+            player.horizontalCollision = true;
+            bl = player.unvalidatedTickEnd.x == 0;
+            bl2 = player.unvalidatedTickEnd.z == 0;
+        }
+
         if (player.horizontalCollision) {
             player.velocity = new Vec3(bl ? 0 : player.velocity.x, player.velocity.y, bl2 ? 0 : player.velocity.z);
         }
 
         // TODO: What the actual value actually? Player still able to bounce on slime despite being .375 block higher.
-        Vector3i blockPos = player.position.down(0.378F).toVector3i();
+        Vector3i blockPos = player.getOnPos(0.378F);
         BoarBlockState blockState = player.compensatedWorld.getBlockState(blockPos, 0);
 
         if (player.verticalCollision) {
@@ -148,14 +160,5 @@ public class EntityTicker {
 
         player.beforeCollision = vec3.clone();
         player.afterCollision = vec32.clone();
-    }
-
-    private BlockPositionIterator getBlockPositionIterator() {
-        final Box box = player.boundingBox;
-        return BlockPositionIterator.fromMinMax(
-                Math.min(GenericMath.floor(box.minX + 0.001), GenericMath.floor(box.minX - 0.001)),
-                Math.min(GenericMath.floor(box.minY + 0.001), GenericMath.floor(box.minY - 0.001)),
-                Math.min(GenericMath.floor(box.minZ + 0.001), GenericMath.floor(box.minZ - 0.001)),
-                GenericMath.floor(box.maxX - 0.001), GenericMath.floor(box.maxY - 0.001), GenericMath.floor(box.maxZ - 0.001));
     }
 }

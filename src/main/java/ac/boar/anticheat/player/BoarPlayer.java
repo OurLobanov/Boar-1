@@ -1,9 +1,10 @@
 package ac.boar.anticheat.player;
 
-import ac.boar.anticheat.alert.AlertManager;
+import ac.boar.anticheat.Boar;
+import ac.boar.anticheat.collision.util.CuboidBlockIterator;
 import ac.boar.anticheat.compensated.cache.entity.EntityCache;
 import ac.boar.anticheat.compensated.world.CompensatedWorldImpl;
-import ac.boar.anticheat.data.UseItemCache;
+import ac.boar.anticheat.data.ItemUseTracker;
 import ac.boar.anticheat.data.vanilla.AttributeInstance;
 import ac.boar.anticheat.teleport.TeleportUtil;
 import ac.boar.anticheat.util.LatencyUtil;
@@ -73,7 +74,7 @@ public final class BoarPlayer extends PlayerData {
     public final ItemTransactionValidator transactionValidator = new ItemTransactionValidator(this);
 
     @Getter
-    private final UseItemCache useItemCache = new UseItemCache(this);
+    private final ItemUseTracker itemUseTracker = new ItemUseTracker(this);
 
     @Getter
     @Setter
@@ -114,13 +115,13 @@ public final class BoarPlayer extends PlayerData {
         latencyPacket.setTimestamp(-id);
         latencyPacket.setFromServer(true);
 
-        if (immediate) {
-            this.cloudburstDownstream.sendPacketImmediately(latencyPacket);
-        } else {
-            this.cloudburstDownstream.sendPacket(latencyPacket);
-        }
-
         this.latencyUtil.addLatencyToQueue(id);
+
+        if (immediate) {
+            this.getSession().sendUpstreamPacketImmediately(latencyPacket);
+        } else {
+            this.getSession().sendUpstreamPacket(latencyPacket);
+        }
     }
 
     public boolean isMovementExempted() {
@@ -134,7 +135,7 @@ public final class BoarPlayer extends PlayerData {
     }
 
     public void kick(String reason) {
-        this.session.disconnect(AlertManager.PREFIX + " " + reason);
+        this.session.disconnect(Boar.getInstance().getAlertManager().getPrefix(getSession()) + " " + reason);
     }
 
     // Prediction related method
@@ -154,11 +155,12 @@ public final class BoarPlayer extends PlayerData {
             }
         }
 
-        this.getUseItemCache().tick();
+        this.getItemUseTracker().preTick();
     }
 
     public void postTick() {
         this.glideBoostTicks--;
+        this.getItemUseTracker().postTick();
     }
 
     public float getYOffset() {
@@ -228,31 +230,37 @@ public final class BoarPlayer extends PlayerData {
     public float getBlockJumpFactor() {
         float f = this.compensatedWorld.getBlockState(this.position.toVector3i(), 0).getJumpFactor();
         float g = this.compensatedWorld.getBlockState(this.getBlockPosBelowThatAffectsMyMovement(), 0).getJumpFactor();
-        return (double)f == 1.0 ? g : f;
+        return f == 1.0 ? g : f;
     }
 
     public Vector3i getBlockPosBelowThatAffectsMyMovement() {
-        return this.getOnPos(0.1F);
+        // This is correct, not getOnPos, try moving on the edge of the slime block on JE/BE and you will see the difference.
+        return position.down(0.1F).toVector3i();
     }
 
     public Vector3i getOnPos(final float offset) {
-//        if (this.supportingBlockPos.isPresent()) {
-//            if (!(offset > 1.0E-5F)) {
-//                return this.supportingBlockPos.get();
-//            } else {
-//                final Vector3i vector3i = this.supportingBlockPos.get();
-//                final TagCache cache = this.session.getTagCache();
-//                final BlockState lv2 = this.compensatedWorld.getBlockState(vector3i);
-//                return offset > 0.5 || !cache.is(BlockTag.FENCES, lv2.block())
-//                        && !cache.is(BlockTag.WALLS, lv2.block()) && !cache.is(BlockTag.FENCE_GATES, lv2.block())
-//                        ? Vector3i.from(vector3i.getX(), GenericMath.floor(y - offset), vector3i.getZ()) : vector3i;
-//            }
-//        } else {
-//            int i = GenericMath.floor(x);
-//            int j = GenericMath.floor(y - offset);
-//            int k = GenericMath.floor(z);
-//            return Vector3i.from(i, j, k);
-//        }
+        Vector3i blockPos = null;
+        float d = Float.MAX_VALUE;
+
+        final CuboidBlockIterator iterator = CuboidBlockIterator.iterator(boundingBox);
+        while (iterator.step()) {
+            int x = iterator.getX(), y = iterator.getY(), z = iterator.getZ();
+            Vector3i blockPos2 = Vector3i.from(x, y, z);
+            if (compensatedWorld.getBlockState(x, y, z, 0).findCollision(this, Vector3i.from(x, y, z), boundingBox.expand(1.0E-3F), true).isEmpty()) {
+                continue;
+            }
+
+            float e = new Vec3(blockPos2).distToCenterSqr(this.position);
+
+            if (e < d || e == d && (blockPos == null || new Vec3(blockPos).compareTo(blockPos2) < 0)) {
+                blockPos = blockPos2;
+                d = e;
+            }
+        }
+
+        if (blockPos != null) {
+            return Vector3i.from(blockPos.getX(), GenericMath.floor(this.position.y - offset), blockPos.getZ());
+        }
 
         return this.position.subtract(0, offset, 0).toVector3i();
     }

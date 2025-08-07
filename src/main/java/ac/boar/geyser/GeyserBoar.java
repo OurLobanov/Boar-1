@@ -2,7 +2,6 @@ package ac.boar.geyser;
 
 import ac.boar.anticheat.Boar;
 import ac.boar.anticheat.alert.AlertManager;
-import ac.boar.anticheat.data.cache.UseDurationCache;
 import ac.boar.anticheat.player.BoarPlayer;
 import lombok.Getter;
 import org.geysermc.event.subscribe.Subscribe;
@@ -19,8 +18,6 @@ import org.geysermc.geyser.api.extension.ExtensionLogger;
 import org.geysermc.geyser.api.util.TriState;
 import org.geysermc.geyser.session.GeyserSession;
 
-import java.util.List;
-
 public class GeyserBoar implements Extension {
     @Getter
     private static ExtensionLogger logger;
@@ -28,7 +25,6 @@ public class GeyserBoar implements Extension {
     @Subscribe
     public void onSessionJoin(SessionLoginEvent event) {
         Boar.getInstance().getPlayerManager().add(event.connection());
-
     }
 
     @Subscribe
@@ -40,7 +36,6 @@ public class GeyserBoar implements Extension {
     public void onGeyserPostInitializeEvent(GeyserPostInitializeEvent event) {
         logger = this.logger();
 
-        UseDurationCache.init();
         Boar.getInstance().init(this);
     }
 
@@ -65,12 +60,14 @@ public class GeyserBoar implements Extension {
                 .permission("boar.alert")
                 .executor((source, cmd, args) -> {
                     AlertManager alertManager = Boar.getInstance().getAlertManager();
+
+                    String prefix = alertManager.getPrefix(source);
                     if (alertManager.hasAlert(source)) {
                         alertManager.removeAlert(source);
-                        source.sendMessage(AlertManager.PREFIX + "§fDisabled alerts.");
+                        source.sendMessage(prefix + "§fDisabled alerts.");
                     } else {
                         alertManager.addAlert(source);
-                        source.sendMessage(AlertManager.PREFIX + "§fEnabled alerts.");
+                        source.sendMessage(prefix + "§fEnabled alerts.");
                     }
                 })
                 .build());

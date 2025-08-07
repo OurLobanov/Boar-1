@@ -13,12 +13,6 @@ public class PlayerTicker extends LivingTicker {
     }
 
     @Override
-    public void tick() {
-        super.tick();
-        // this.updatePlayerPose();
-    }
-
-    @Override
     public void applyInput() {
         super.applyInput();
         boolean sneaking = player.getFlagTracker().has(EntityFlag.SNEAKING) || player.getInputData().contains(PlayerAuthInputData.STOP_SNEAKING);
@@ -26,7 +20,7 @@ public class PlayerTicker extends LivingTicker {
             player.input = player.input.multiply(0.3F);
         }
 
-        if (player.getUseItemCache().isUsingItem()) {
+        if (player.getFlagTracker().has(EntityFlag.USING_ITEM)) {
             player.input = player.input.multiply(0.122499995F);
         }
     }
@@ -44,41 +38,19 @@ public class PlayerTicker extends LivingTicker {
     protected void travel() {
         if (player.getFlagTracker().has(EntityFlag.SWIMMING)) {
             float d = MathUtil.getRotationVector(player.pitch, player.yaw).y;
-            float e = d < -0.2 ? 0.085F : 0.06F;
-            final FluidState state = player.compensatedWorld.getFluidState(player.position.add(0, 1.0F - 0.1F, 0).toVector3i());
-            if ((d <= 0.0 || state.fluid() != Fluid.EMPTY) && !player.getInputData().contains(PlayerAuthInputData.JUMPING)) {
-                player.velocity = player.velocity.add(0, (d - player.velocity.y) * e, 0);
+
+            // Seems to be the case, on JE they check for fluid state 0.9 blocks up to prevent player from resurfacing when swimming
+            // But on BE they seem to be setting the y motion to 0 instead (you can press space to swim up on JE but not on BE when near water surface)
+            if (player.compensatedWorld.getFluidState(player.position.up(0.4F).toVector3i()).fluid() == Fluid.EMPTY && d > 0 && d < 0.55) {
+                player.velocity.y = 0;
+            } else {
+                float e = d < -0.2 ? 0.085F : 0.06F;
+                final FluidState state = player.compensatedWorld.getFluidState(player.position.toVector3i());
+                if ((d <= 0.0 || state.fluid() != Fluid.EMPTY) && !player.getInputData().contains(PlayerAuthInputData.JUMPING)) {
+                    player.velocity = player.velocity.add(0, (d - player.velocity.y) * e, 0);
+                }
             }
         }
         super.travel();
     }
-
-//    private void updatePlayerPose() {
-//        if (!this.canPlayerFitWithinBlocksAndEntitiesWhen(Pose.SWIMMING)) {
-//            return;
-//        }
-//        Pose pose = this.getDesiredPose();
-//        player.pose = /* this.isSpectator() || this.isPassenger() || */ this.canPlayerFitWithinBlocksAndEntitiesWhen(pose) ? pose : (this.canPlayerFitWithinBlocksAndEntitiesWhen(Pose.CROUCHING) ? Pose.CROUCHING : Pose.SWIMMING);
-//        player.setPose(player.pose);
-//    }
-//
-//    private Pose getDesiredPose() {
-//        if (player.getFlagTracker().has(EntityFlag.SWIMMING)) {
-//            return Pose.SWIMMING;
-//        }
-//        if (player.getFlagTracker().has(EntityFlag.GLIDING)) {
-//            return Pose.GLIDING;
-//        }
-//        if (player.getFlagTracker().has(EntityFlag.DAMAGE_NEARBY_MOBS)) {
-//            return Pose.SPIN_ATTACK;
-//        }
-//        if (player.getFlagTracker().has(EntityFlag.SNEAKING)/* && !this.abilities.flying */) {
-//            return Pose.CROUCHING;
-//        }
-//        return Pose.STANDING;
-//    }
-//
-//    protected boolean canPlayerFitWithinBlocksAndEntitiesWhen(Pose pose) {
-//        return player.compensatedWorld.noCollision(player.getDimensions(pose).getBoxAt(player.unvalidatedPosition).contract(1.0E-7F));
-//    }
 }

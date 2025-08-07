@@ -13,8 +13,10 @@ import ac.boar.anticheat.util.math.Vec3;
 import org.cloudburstmc.protocol.bedrock.data.Ability;
 import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
 import org.cloudburstmc.protocol.bedrock.data.entity.EntityFlag;
+import org.cloudburstmc.protocol.bedrock.data.inventory.ItemData;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
 import org.geysermc.geyser.item.Items;
+import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -33,11 +35,10 @@ public class LegacyAuthInputPackets {
         final UncertainRunner uncertainRunner = new UncertainRunner(player);
 
         // Properly calculated offset by comparing position instead of poorly calculated velocity that get calculated using (pos - prevPos) to account for floating point errors.
-        double offset = player.position.distanceTo(player.unvalidatedPosition);
+        float offset = player.position.distanceTo(player.unvalidatedPosition);
         float extraOffset = uncertainRunner.extraOffset(offset);
         offset -= extraOffset;
-
-        uncertainRunner.doTickEndUncertain();
+        offset -= uncertainRunner.extraOffsetNonTickEnd(offset);
 
         for (Map.Entry<Class<?>, Check> entry : player.getCheckHolder().entrySet()) {
             Check v = entry.getValue();
@@ -71,6 +72,8 @@ public class LegacyAuthInputPackets {
                 }
             }
         }
+
+        player.prevPosition = player.position;
     }
 
     public static void correctInputData(final BoarPlayer player, final PlayerAuthInputPacket packet) {
@@ -124,6 +127,10 @@ public class LegacyAuthInputPackets {
     }
 
     public static void processInputData(final BoarPlayer player) {
+        if (!player.getFlagTracker().has(EntityFlag.USING_ITEM)) {
+            player.sinceTridentUse = 0;
+        }
+
         for (final PlayerAuthInputData input : player.getInputData()) {
             switch (input) {
                 case START_GLIDING -> {
@@ -132,10 +139,7 @@ public class LegacyAuthInputPackets {
                     // Prevent player from spoofing elytra gliding.
                     player.getFlagTracker().set(EntityFlag.GLIDING, player.compensatedInventory.translate(cache.get(1).getData()).getId() == Items.ELYTRA.javaId());
                 }
-                case STOP_GLIDING -> {
-                    player.getFlagTracker().set(EntityFlag.GLIDING, false);
-                    player.glideBoostTicks = 0;
-                }
+                case STOP_GLIDING -> player.getFlagTracker().set(EntityFlag.GLIDING, false);
 
                 // Don't let player do backwards sprinting!
                 case START_SPRINTING -> player.setSprinting(player.input.getZ() > 0);
@@ -157,9 +161,12 @@ public class LegacyAuthInputPackets {
                 }
 
                 case START_USING_ITEM -> {
-                    if (player.getUseItemCache().getConsumer() != null) {
-                        player.getUseItemCache().getConsumer().accept(player.getUseItemCache());
-                    }
+                    final ItemData itemData = player.compensatedInventory.inventoryContainer.getHeldItemData();
+                    ItemStack item = player.compensatedInventory.translate(itemData);
+
+                    player.getFlagTracker().set(EntityFlag.USING_ITEM, true);
+                    player.getItemUseTracker().use(itemData, item.getId());
+                    player.getItemUseTracker().setDirtyUsing(false);
                 }
 
                 case START_CRAWLING -> player.getFlagTracker().set(EntityFlag.CRAWLING, true);
@@ -167,19 +174,12 @@ public class LegacyAuthInputPackets {
             }
         }
 
-        if (player.getUseItemCache().getConsumer() != null) {
-            player.getUseItemCache().setConsumer(null);
+        if (player.getItemUseTracker().isDirtyUsing()) {
+            player.getItemUseTracker().setDirtyUsing(false);
 
-            // A bit hacky but ok.
-            if (!player.getInputData().contains(PlayerAuthInputData.START_USING_ITEM)) {
-                player.getSession().releaseItem();
-            }
+            // Shit hack TODO: Properly check for when the item CAN BE USE
+            player.getSession().releaseItem();
         }
-
         player.dirtySpinStop = false;
-
-//        final StringBuilder builder = new StringBuilder();
-//        player.getInputData().forEach(input -> builder.append(input).append(","));
-//        Bukkit.broadcastMessage(builder.toString());
     }
 }

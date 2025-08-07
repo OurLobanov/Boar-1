@@ -70,9 +70,10 @@ public class ServerDataPackets implements PacketListener {
 
             Float height = packet.getMetadata().get(EntityDataTypes.HEIGHT);
             Float width = packet.getMetadata().get(EntityDataTypes.WIDTH);
+            Float scale = packet.getMetadata().get(EntityDataTypes.SCALE);
 
             final EnumSet<EntityFlag> flags = packet.getMetadata().getFlags();
-            if (flags == null && height == null && width == null) {
+            if (flags == null && height == null && width == null && scale == null) {
                 return;
             }
 
@@ -91,6 +92,11 @@ public class ServerDataPackets implements PacketListener {
             player.getLatencyUtil().addTaskToQueue(id, () -> {
                 if (flagsCopy != null) {
                     player.getFlagTracker().set(flagsCopy);
+
+                    boolean usingItem = player.getFlagTracker().has(EntityFlag.USING_ITEM);
+                    if (usingItem && player.getItemUseTracker().getJavaItemId() == -1) {
+                        player.getFlagTracker().set(EntityFlag.USING_ITEM, false);
+                    }
                 }
 
                 // Dimension seems to be controlled server-side as far as I know (tested with clumsy).
@@ -114,6 +120,10 @@ public class ServerDataPackets implements PacketListener {
                     player.dimensions = EntityDimensions.fixed(player.dimensions.width(), height).withEyeHeight(eyeHeight);
                     player.boundingBox = player.dimensions.getBoxAt(player.position);
                     // System.out.println("Update height!");
+                }
+
+                if (scale != null) {
+                    player.dimensions = player.dimensions.hardScaled(scale);
                 }
 
                 if (player.desyncedFlag.get() == id) {
@@ -162,7 +172,7 @@ public class ServerDataPackets implements PacketListener {
 
             player.getFlagTracker().set(EntityFlag.SNEAKING, packet.getFlags().contains(EntityFlag.SNEAKING));
             player.getFlagTracker().set(EntityFlag.SWIMMING, packet.getFlags().contains(EntityFlag.SWIMMING) && player.touchingWater);
-            player.setSprinting(packet.getFlags().contains(EntityFlag.SPRINTING));
+            player.getFlagTracker().set(EntityFlag.SPRINTING, packet.getFlags().contains(EntityFlag.SPRINTING));
 
             boolean using = packet.getFlags().contains(EntityFlag.USING_ITEM);
             if (!using) {

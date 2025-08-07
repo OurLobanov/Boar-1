@@ -28,6 +28,11 @@ public class TeleportHandler {
 
             queuedTeleports.poll();
 
+            TeleportCache peek = queuedTeleports.peek();
+            if (peek != null && player.receivedStackId.get() < peek.getStackId()) {
+                continue;
+            }
+
             // Bedrock don't reply to teleport individually using a separate tick packet instead it just simply set its position to
             // the teleported position and then let us know the *next tick*, so we do the same!
             if (cache instanceof TeleportCache.Normal normal) {
@@ -54,7 +59,7 @@ public class TeleportHandler {
     }
 
     private void processTeleport(final BoarPlayer player, final TeleportCache.Normal normal, final PlayerAuthInputPacket packet) {
-        double distance = packet.getPosition().distance(normal.getPosition().toVector3f());
+        float distance = packet.getPosition().distance(normal.getPosition().toVector3f());
         // I think I'm being a bit lenient but on Bedrock the position error seems to be a bit high.
         if (packet.getInputData().contains(PlayerAuthInputData.HANDLE_TELEPORT) && distance <= 1.0E-3F) {
             player.setPos(new Vec3(packet.getPosition().sub(0, player.getYOffset(), 0)));
